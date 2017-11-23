@@ -1,0 +1,1005 @@
+---
+author: "Tony"
+title: "Classification"
+output:
+  html_document:
+    keep_md: true
+    toc: true
+    number_sections: true
+---
+
+```{r global_options, include = FALSE}
+knitr::opts_chunk$set(
+  fig.width = 11,
+  fig.height = 7,
+  fig.path = "figs/",
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+
+# Introduction
+
+This is an attempt to predict whether or not a team will go over
+or under the number of wins projected by a Vegas sportsbook.
+
+
+# Importing the Data
+
+
+```{r setup, include = FALSE}
+if (substr(getwd(), 1, 1) == "C") {
+  setwd("C:/Users/aelhabr/Dropbox/data_science/projects/nba/tr")
+} else if (substr(getwd(), 1, 1) == "O") {
+  setwd("O:/_other/code/tony/nba/tr")
+}
+
+rm(list = ls())
+# dev.off()
+# graphics.off()
+# par(mar = c(0, 0, 0, 0))
+```
+
+
+*Note that I generally use the prefix "d_" in order to identify
+something as data.
+
+
+```{r import_data}
+dir_data <- paste0(getwd(), "/data/")
+d_scraped_stats_raw <-
+  readRDS(paste0(dir_data, "d_scraped_stats_raw.rds"))
+d_win_totals_raw <-
+  readRDS(paste0(dir_data, "d_win_totals.rds"))
+p_win_totals_raw <-
+  readRDS(paste0(dir_data, "p_win_totals.rds"))
+# colnames(d_scraped_stats_raw)
+# colnames(d_win_totals_raw)
+# colnames(p_win_totals_raw)
+```
+
+
+# Tidying and Transforming the Data
+
+Here I'm simply defining some variables that will be used either for
+tidying/transforming the data and/or, later, for modeling the data.
+
+
+```{r define_variables}
+# yrs <- 2012:2016
+yrs <- 2007:2016
+cols_join <- c("team", "yr_start")  # essential variables for joins
+cols_stats <- c("off_efficiency", "def_efficiency")
+```
+
+
+Now I'll tidy and transform.
+
+
+```{r tidy_and_transform_data}
+library(tidyverse)
+
+# Selecting only the desired columns.
+# dplyr's select() function may conflict with other packages.
+d_scraped_stats <- d_scraped_stats_raw %>%
+  dplyr::select(one_of(c(cols_join, cols_stats)))
+
+p_win_totals <- p_win_totals_raw %>%
+  dplyr::select(one_of(c("pick_id",
+                         "person",
+                         "pick",
+                         "confidence")))
+# Not only selecting the desired columns, but also adding
+# some variables to (possibly) be used in models.
+# The inner_join might not work if the team columns is not of the same type
+# in each data set. (It must be either a character/factor in both data sets.)
+d_win_totals <- d_win_totals_raw %>%
+  filter(yr_start %in% yrs) %>%
+  dplyr::select(one_of(
+    "pick_id",
+    cols_join,
+    "w",
+    "w_sportsbook",
+    "odds_over",
+    "odds_under"
+  )) %>%
+  #   group_by(yr_start) %>%
+  #   mutate(w_rnk = dense_rank(desc(w)),
+  #   w_sportsbook_rnk = dense_rank(desc(w_sportsbook))) %>%
+  #   ungroup() %>%
+  group_by(team) %>%
+  mutate(w_lag1 = lag(w),
+         w_diff2 = (lag(w) - lag(w, 2))) %>%
+  ungroup() %>%
+  mutate(result =
+           ifelse(w > w_sportsbook, "O",
+                  ifelse(w < w_sportsbook, "U", "O"))) %>%
+  ungroup() %>%
+  group_by(team) %>%
+  mutate(result_lag1 = lag(result),
+         w_sportsbook_err1 = (lag(w) - lag(w_sportsbook))) %>%
+  ungroup() %>%
+  mutate(
+    prob_implied_over =
+      ifelse(
+        odds_over < 0,
+        -odds_over / (-odds_over + 100),
+        ifelse(odds_over > 0, 100 / (odds_over + 100), 0)
+      ),
+    prob_implied_under =
+      ifelse(
+        odds_under < 0,
+        -odds_under / (-odds_under + 100),
+        ifelse(odds_under > 0, 100 / (odds_under + 100), 0)
+      ),
+    prob_implied_diff = prob_implied_over - prob_implied_under,
+    underdog_over =
+      ifelse(odds_over > 0, 1,
+             ifelse(odds_over < 0, 0, 0)),
+    underdog_under =
+      ifelse(odds_under > 0, 1,
+             ifelse(odds_under < 0, 0, 0))
+  )
+
+
+# The "pick_id" field in the rds data sets serves as a primary key
+# upon which the pick data can be joined with the other data.
+d_win_totals$result <- as.factor(d_win_totals$result)
+d_win_totals$result_lag1 <-
+  as.factor(d_win_totals$result_lag1)
+
+# Could replace years with no odds with constant, but choosing to exclude
+# them instead.
+# d_win_totals$odds_over <-
+#   as.numeric(str_replace_all(d_win_totals$odds_over, "na", -110))
+# d_win_totals$odds_under <-
+#   as.numeric(str_replace_all(d_win_totals$odds_under, "na", -110))
+
+# Converting a confidence rating to a win number for potential use in modeling.
+# Note that we did not submit confidence ratings until 2014.
+d_join <- d_win_totals %>%
+  left_join(p_win_totals, by = "pick_id") %>%
+  dplyr::select(-pick_id) %>%
+  mutate(
+    pick_result_bool =
+      ifelse(pick == result, 1, 0),
+    w_pick_confidence =
+      ifelse(
+        confidence == 0,
+        ifelse(
+          pick == "O",
+          round(w_sportsbook + 1.5, 0),
+          round(w_sportsbook - 1.5, 0)
+        ),
+        ifelse(pick == "O",
+               round(w_sportsbook + (3 - confidence / 10), 0),
+               round(w_sportsbook - (3 - confidence / 10), 0))
+      )
+  )
+```
+
+# Modeling the Data
+
+
+
+
+## Logisitic Regression
+
+Because there is duplicate information in my final tidy data set due
+to there being two people for whom picks were tracked, I'll filter the
+data set to just distinct results. I'm not going to evaluate the picks that
+my brother and I made yet (even though I did some calculations with this
+data above).
+
+
+```{r }
+d_model <- d_join %>%
+  dplyr::select(-person,
+                -pick,
+                -confidence,
+                -pick_result_bool,
+                -w_pick_confidence) %>%
+  distinct()
+```{r remove_temp_data, include = FALSE}
+# rm(list = ls()[!(ls() %in% c("d_join", "d_model", "yrs", "cols_join"))])
+```
+
+
+
+
+
+```{r pairs, include = FALSE}
+# library(GGally)
+# ggpairs(dplyr::select(d_model, -yr_start, -team, -result, -result_lag1))
+```
+
+
+Let's look at some correlations between the response variable and
+some of the predictors that I intend to use in my models. First, I'll
+setup the data for the correlations analysis.
+
+
+```{r correlations_setup}
+y_name <- "result"
+# x_names <- c("result_lag1", "w_diff2")
+# result_lag1 portrays same information as w_sportsbook_err1.
+# w_diff2 should probably correspond with w_sportsbook_err1, but the
+# relationship isn't causal.
+x_names <-
+  c("w_sportsbook_err1",
+    "w_diff2",
+    "prob_implied_diff")
+d_model_x <- d_model %>%
+  dplyr::select(one_of(x_names))
+```
+
+
+Now I can look at the correlations. I can't simply use `cor()`. Instead,
+I have to use a function from a package that can handle factors.
+
+
+```{r }
+# correlations
+# library(polycor)
+#
+# # Need as.data.frame() because tibbles are interpreted as lists.
+# d_cor <- hetcor(as.data.frame(d_model_x))
+# d_cor$correlations <- round(d_cor$correlations, 2)
+# d_cor$correlations
+```{r correlations_2, include = FALSE}
+# library(GGally)
+# ggcorr(d_cor$correlations, palette = "RdBu", label = TRUE)
+#
+# library(corrplot)
+# corrplot(
+#   d_cor$correlation,
+#   type = "upper",
+#   order = "hclust",
+#   tl.col = "black",
+#   tl.srt = 45
+# )
+#
+# symnum(d_cor$correlations)
+```
+
+pairs_2, include = FALSE
+
+```{r }
+# library(GGally)
+# ggpairs(d_model_x)
+```
+
+
+### Logistic Regression Attempt #1
+
+First, I'll try a simple model that uses the sportbook win total and my
+confidence rating converted to a win number as predictors. It turns out that
+this model isn't very good at all. The p-values indicate that neither of the
+predictors is significant.
+
+
+```{r lm_1_create}
+fmla_1 <-
+  paste(y_name, paste(x_names, collapse = " + "), sep = " ~ ")
+# fmla_1 <- "result ~ w_sportsbook + w_pick_confidence"
+# fmla_1 <- "result ~ result_lag1 + w_pick_confidence"
+# fmla_1 <- "result ~ w_sportsbook_err1 + w_diff2"
+lm_1_fit_full <- glm(fmla_1, data = d_model, family = binomial)
+summary(lm_1_fit_full)$coef
+coef(lm_1_fit_full)
+```
+
+
+How bad of a fit is it? It does worse that 50/50 in predicitng over/unders.
+And I haven't even split up the data set into train/test/validation sets.
+
+
+```{r lm_1_eval}
+lm_1_prob_full <- predict(lm_1_fit_full, type = "response")
+lm_1_pred_full <- rep("U", dim(d_model)[1])
+lm_1_pred_full[lm_1_prob_full > mean(lm_1_prob_full)] = "O"
+table(lm_1_pred_full, d_model$result)
+round(mean(lm_1_pred_full == d_model$result), 2)
+```
+
+
+How much worse (or better) might the prediction performance get when
+properly trained/tested on different sets? In this analysis,
+I'm going not going to create a validation set. Instead,
+I'm simply going to split the data into train and test sets. This could be
+done in a number of ways, such as random sampling. However,
+I'm simply going to use a single year's worth of data
+(out of the five that I'm working with) as a test set.
+
+I'm going to put this into a function so that I can use it again.
+
+
+```{r lm_1_eval_2}
+train_test_lm <- function(d_model, fmla, yrs) {
+  mean_pct <- list()
+  for (i in 1:length(yrs)) {
+    vector_train <- !(d_model$yr_start %in% yrs[i])
+
+    d_model_test <- d_model[!vector_train,]
+    d_y_test <- d_model$result[!vector_train]
+
+
+    # lm_fit_train <- glm(fmla, data = d_model,
+    #                     family = binomial,
+    #                     subset = vector_train)
+    # This is an alternative.
+    d_model_train <- d_model[vector_train,]
+    lm_fit_train <-
+      glm(fmla, data = d_model_train, family = binomial)
+    lm_prob_test <-
+      predict(lm_fit_train, d_model_test, type = "response")
+
+    lm_pred_test <- rep("U", dim(d_model_test)[1])
+    lm_pred_test[lm_prob_test > mean(lm_prob_test)] = "O"
+    # lm_pred_test[lm_prob_test > 0.5] = "O"
+
+    mean_pct[i] <- mean(lm_pred_test == d_y_test)
+
+    # # This is an alternative.
+    # lm_conf_matrix <- table(lm_pred_test, d_y_test)
+    # mean_pct[i] <-
+    #   (sum(lm_conf_matrix[1, 1] + lm_conf_matrix[2, 2]) /
+    #      sum(lm_conf_matrix))
+  }
+  mean_pct
+}
+
+lm_1_mean_pct <- train_test_lm(d_model, fmla_1, yrs)
+round(mean(as.numeric(lm_1_mean_pct)), 2)
+round(as.numeric(lm_1_mean_pct), 2)
+```
+
+
+Unfortunately, it doesn't look like there is not much
+improvement/degradation whenperforming proper training/testing.
+I'll intepret this to indicate that the model isn't very good.
+
+### Logistic Regression Attempt #2
+
+How about using an interaction term between the same two predictors?
+Unfortuantely, that still doesn't create such a great model. Again,
+the p-values indicate that neither of the variables is significant.
+
+
+```{r lm_2_create}
+fmla_2 <-
+  paste(y_name, paste(x_names, collapse = " * "), sep = " ~ ")
+# fmla_2 <- "result ~ w_sportsbook * w_pick_confidence"
+# fmla_2 <- "result ~ result_lag1 * w_pick_confidence"
+# fmla_2 <- "result ~ w_sportsbook_err1 * w_diff2"
+lm_2_fit_full <- glm(fmla_2, data = d_model, family = binomial)
+summary(lm_2_fit_full)$coef
+coef(lm_2_fit_full)
+```
+
+
+As with the previous model, this model's performance
+when trained and tested on the full data set is unexceptional.
+
+
+```{r lm_2_eval}
+lm_2_prob_full <- predict(lm_2_fit_full, type = "response")
+lm_2_pred_full <- rep("U", dim(d_model)[1])
+lm_2_pred_full[lm_2_prob_full > mean(lm_2_prob_full)] = "O"
+table(lm_2_pred_full, d_model$result)
+round(mean(lm_2_pred_full == d_model$result), 2)
+```
+
+
+And how does it look if we implement a more proper train/test methodology?
+Again, it doesn't seem like there is not much of a difference.
+
+
+```{r lm_2_eval_2}
+lm_2_mean_pct <- train_test_lm(d_model, fmla_2, yrs)
+round(mean(as.numeric(lm_2_mean_pct)), 2)
+round(as.numeric(lm_2_mean_pct), 2)
+```
+
+
+Interestingly, the first model looks (marginally) better when evaluating by
+the mean correct prediction percentage over each year. Nevertheless,
+the two models show the similar performance trends in the same years.
+That is, both perform above/below/equal to average on the same years, but
+even this inference is not very definitive.
+
+In all, I conclude that both aren't very good models.
+
+### Logistic Regression Attempt #3
+
+Enough of those models! Let's try something simpler. This time, let's see how
+using only one predictor works. I'm choosing to go with the predictor that
+portrays the amount of error in the sportsbook's projected win total
+from the previous year since that variable exhibited the one of the lower
+p-values in our previous models.
+
+
+```{r lm_3_create}
+fmla_3 <- "result ~ w_sportsbook_err1"
+lm_3_fit_full <- glm(fmla_3, data = d_model, family = binomial)
+coef(lm_3_fit_full)
+summary(lm_3_fit_full)$coef
+```
+
+
+Unfortunately, even in this setting, the predictor's p-value doesn't
+seem to be significant. Anyways, let's see how well this simple model
+does in prediction.
+
+
+```{r lm_3_eval}
+lm_3_prob_full <- predict(lm_3_fit_full, type = "response")
+lm_3_pred_full <- rep("U", dim(d_model)[1])
+lm_3_pred_full[lm_3_prob_full > mean(lm_3_prob_full)] = "O"
+table(lm_3_pred_full, d_model$result)
+round(mean(lm_3_pred_full == d_model$result), 2)
+```
+
+
+Wow! That's outstanding performance. But... what if I don't train
+and predict on the full data set?
+
+
+```{r lm_3_eval_2}
+lm_3_mean_pct <- train_test_lm(d_model, fmla_3, yrs)
+round(mean(as.numeric(lm_3_mean_pct)), 2)
+round(as.numeric(lm_3_mean_pct), 2)
+```
+
+
+Training/testing gives a prediction accuracy around 50% once again.
+These results (unfortunately) are much more reasonable and
+are in line with the other models that I've tried. This is why you shouldn't
+train/test on the entire data set! You can end up over-fitting the model
+very badly!
+
+### Logistic Regression Attempt #4
+
+How about adding in another one of the variable that showed a
+low p-value in our previous attempts? Perhaps using only one variable is
+too drastic.
+
+
+```{r lm_4_create}
+fmla_4 <- "result ~ w_sportsbook_err1 + prob_implied_diff"
+lm_4_fit_full <- glm(fmla_4, data = d_model, family = binomial)
+coef(lm_4_fit_full)
+summary(lm_4_fit_full)$coef
+```
+
+
+
+```{r lm_4_eval}
+lm_4_prob_full <- predict(lm_4_fit_full, type = "response")
+lm_4_pred_full <- rep("U", dim(d_model)[1])
+lm_4_pred_full[lm_4_prob_full > mean(lm_4_prob_full)] = "O"
+table(lm_4_pred_full, d_model$result)
+round(mean(lm_4_pred_full == d_model$result), 2)
+```
+
+
+Again, we see outstanding performance when training/testing on the entire
+data set. Now let's do some proper training/testing.
+
+
+```{r lm_4_eval_2}
+lm_4_mean_pct <- train_test_lm(d_model, fmla_4, yrs)
+round(mean(as.numeric(lm_4_mean_pct)), 2)
+round(as.numeric(lm_4_mean_pct), 2)
+```
+
+
+And again, we see that the prediction performance of the improperly
+trained/tested model was deceiving.
+
+## Linear Discriminant Analysis (LDA)
+
+Now I'm going to try a different model framework: Linear Discriminant
+Analysis (LDA). I'll be using the `lda()` function from the `MASS` package.
+
+
+```{r remove_lm_stuff, include = FALSE}
+# rm(list = ls()[!(
+#   ls() %in% c(
+#     "d_join",
+#     "d_model",
+#     "yrs",
+#     "cols_join",
+#     "fmla_1",
+#     "fmla_2",
+#     "fmla_3",
+#     "fmla_4"
+#   )
+# )])
+```
+
+### LDA Attempt #1
+
+I'm going to start out with using the same formula that I used with the
+first logistic regression model.
+
+
+```{r lda_1_create}
+library(MASS)
+
+# Need as.formula() for this.
+lda_1_fit_full <-
+  na.exclude(lda(as.formula(fmla_1), data = d_model))
+lda_1_fit_full
+```
+
+
+Simple enough. Now let's evaluate this model on the entire data set.
+
+
+```{r lda_1_eval}
+
+suppressWarnings(lda_1_pred_full <-
+                   predict(lda_1_fit_full, d_model))
+lda_conf_matrix <- table(lda_1_pred_full$class, d_model$result)
+lda_conf_matrix
+(sum(lda_conf_matrix[1, 1] + lda_conf_matrix[2, 2]) / sum(lda_conf_matrix))
+```
+
+
+It appears that this model performs better than its
+logistic regression counterpart when trained/tested on the entire data set.
+However, its true robustness will be shown when we train/test in a
+more proper manner. I'll use the same method as shown before.
+
+
+```{r lda_1_eval_2}
+train_test_lda <- function(d_model, fmla, yrs) {
+  mean_pct <- list()
+  for (i in 1:length(yrs)) {
+    vector_train <- !(d_model$yr_start %in% yrs[i])
+
+    d_model_test <- d_model[!vector_train,]
+    d_y_test <- d_model$result[!vector_train]
+
+    lda_fit_train <-
+      lda(as.formula(fmla), data = d_model, subset = vector_train)
+    # This is an alternative.
+    # d_model_train <- d_model[vector_train, ]
+    # lda_fit_train <- lda(as.formula(fmla), data = d_model_train)
+    suppressWarnings(lda_pred_test <-
+                       predict(lda_fit_train, d_model_test))
+
+    # This is the alternative for other functions, but the primary
+    # option for this function since there is no equivalent to
+    # mean(lda_pred_test$class == d_y_test)
+    lda_conf_matrix <- table(lda_pred_test$class, d_y_test)
+    mean_pct[i] <-
+      (sum(lda_conf_matrix[1, 1] + lda_conf_matrix[2, 2]) /
+         sum(lda_conf_matrix))
+  }
+  mean_pct
+}
+
+lda_1_mean_pct <- train_test_lda(d_model, fmla_1, yrs)
+round(mean(as.numeric(lda_1_mean_pct), na.rm = TRUE), 2)
+round(as.numeric(lda_1_mean_pct), 2)
+```
+
+
+Not too bad ... Maybe this is an acceptable model.
+
+Now, I want to take a closer look at the train/test output of this LDA
+model. I'll use the data from the 2016 season as the tet set
+and the data from the years prior to it as the train set.
+
+Here, I'm basically removing the iteration from the train/test function.
+
+
+```{r lda_1_eval_3}
+vector_train <- !(d_model$yr_start %in% 2016)
+d_model_test <- d_model[!vector_train,]
+d_y_test <- d_model$result[!vector_train]
+lda_1_fit_train <-
+  lda(as.formula(fmla_1), data = d_model, subset = vector_train)
+lda_1_pred_test <- predict(lda_1_fit_train, d_model_test)
+lda_1_conf_matrix <- table(lda_1_pred_test$class, d_y_test)
+lda_1_conf_matrix
+
+sum(lda_1_pred_test$posterior[, 1] > 0.5)
+sum(lda_1_pred_test$posterior[, 1] <= 0.5)
+
+lda_1_pred_test$posterior[1:30, 1]
+sum(lda_1_pred_test$posterior[, 1] > 0.6)
+sum(lda_1_pred_test$posterior[, 1] < 0.4)
+```
+
+
+It seems like this model generates fairly reasonable probabilities.
+After all, I wouldn't expect the posterior probabilities to deviate
+very far from 0.5.
+
+But which teams does this model project have the highest probability of
+outperforming/underperforming their expectations (as determined by the
+sportsbook win total)?
+
+
+```{r lda_1_eval_4}
+max(lda_1_pred_test$posterior[, 1])
+d_model_test$team[which.max(lda_1_pred_test$posterior[, 1])]
+min(lda_1_pred_test$posterior[, 1])
+d_model_test$team[which.min(lda_1_pred_test$posterior[, 1])]
+```
+
+
+UPDATE: Actually, it appears that this LDA model is weighing the w_diff2
+factor heavily, so the teams with the largest +- w_diff2 have the largest
+posterior probabilities.
+
+So this LDA model picks POR to have the best chance of going over its
+win total and NYK to have the worst chance of going under its win total in
+the year 2016. This actually makes sense. Although POR was projected to do
+relatively well, and did, in fact, end up with a good win-loss
+record in 2016, one might expect that bookies set the win total lower than
+it should be for bad and/or "non-public" teams in order to try to
+even out the money placed on each betting side.
+
+In general, public bettors are more likely to make
+bets purely on perception, so they are more likely to believe a bad team
+will do very bad and a good team will do very good, and so they are more
+likely to bet the under on a bad team and the over on a good team. Although
+this deduction is fairly anecdotal, one can easily find research proving
+this statement. Thus, in order to even out the betting sides, bookies are
+more likely to exaggerate the win totals for the teams at the top and bottom
+of the league.
+
+Another common bettor behavior may explain the why LDA model shows that
+NYK is most likely to go under its projected win total (and, conversely, why
+POR is most likely to exceed its win total). Teams in big cities
+like New York are more likely to have "fanatical" fans that set overly-
+optimistic expectations for their teams. Thus, to take advantage of their
+potential foolishness and willingness to bet the over, bookies generally tend
+to set the win totals for these "public" (i.e. big city or very popular)
+teams
+higher than they should be. (For example, this is also true of the
+Dallas Cowboys in the NFL and the New York Yankees and Chicago Cubs in
+the MLB.)
+
+```{r remove_lda, include = FALSE}
+# rm(list = ls()[!(
+#   ls() %in% c(
+#     "d_join",
+#     "d_model",
+#     "yrs",
+#     "cols_join",
+#     "fmla_1",
+#     "fmla_2",
+#     "fmla_3",
+#     "fmla_4"
+#   )
+# )])
+```
+
+
+Support Vector Machine (SVM) Attempt # 1
+
+Now, I'll look experiment with another family of models that can be
+used to predict categorical response variables: support vector machines (SVMs).
+
+
+```{r }
+# # Option #1
+# d_model_no_fctrs <- d_model
+# indx <- sapply(d_model_no_fctrs, is.factor)
+# d_model_no_fctrs[indx] <- lapply(d_model_no_fctrs[indx], function(x) as.numeric(x))
+
+# # Option #2
+# d_model_no_fctrs <- d_model
+# d_model_no_fctrs$result_lag1 <- as.numeric(d_model_no_fctrs$result_lag1)
+# d_model_no_fctrs$team <- as.numeric(d_model_no_fctrs$team)
+```{r svm_1_linear_create}
+library(e1071)
+
+# Predictors can't be factors, so remove them. Alternatively, could convert
+# factors to numerics.
+d_model_no_fctrs <- d_model %>% dplyr::select(-team, -result_lag1)
+
+# Need as.formula() here.
+svm_1_linear_full_fit <-
+  svm(
+    as.formula(fmla_1),
+    data = d_model_no_fctrs,
+    kernel = "linear",
+    cost = 20,
+    scale = TRUE
+  )
+svm_1_linear_full_fit
+```{r svm_1_linear_plot, include = FALSE}
+# plot() won't work since formula isn't explicit in svm() call.
+# plot(svm_1_linear_full_fit, d_model_no_fctrs)
+```
+
+
+I'll try out the same method for train/test evaluation that I've been using.
+I'm not going to explicity try out various cost values. I'll just use
+the default value of 1. (Update: Actually, I'm using the value returned
+by cross validation on the given data set. This will be shown again
+shortly.)
+
+
+```{r svm_1_linear_eval}
+train_test_svm <-
+  function(d_model_no_fctrs,
+           fmla,
+           yrs,
+           kernel_type,
+           cost = 1) {
+    # fmla <- fmla_1
+    # kernel_type <- "linear"
+    # cost <- 1
+    # i <- 1
+    range_cost <- 10 ^ seq(-3, 2, 1)
+    svm_linear_tune <-
+      tune(
+        svm,
+        as.formula(fmla),
+        data = d_model_no_fctrs,
+        kernel = kernel_type,
+        ranges = list(cost = range_cost)
+      )
+    svm_linear_best <- svm_linear_tune$best.model
+    mean_pct <- list()
+    for (i in 1:length(yrs)) {
+      vector_train <- !(d_model_no_fctrs$yr_start %in% yrs[i])
+      d_model_no_fctrs_test <- d_model_no_fctrs[!vector_train,]
+      d_y_test <- d_model_no_fctrs$result[!vector_train]
+
+      # This isn't working?
+      # svm_fit_train <-
+      #   svm(
+      #     as.formula(fmla),
+      #     data = d_model_no_fctrs,
+      #     kernel = kernel_type,
+      #     cost = 1
+      #   )
+      # This is an alternative. It also doesn't work?
+      # d_model_train <- d_model_no_fctrs[vector_train, ]
+      # svm_fit_train <-
+      #   svm(
+      #     as.formula(fmla),
+      #     data = d_model_train,
+      #     kernel = kernel_type,
+      #     cost = cost
+      #   )
+      svm_pred_test <-
+        predict(svm_linear_best, d_model_no_fctrs_test)
+      mean_pct[i] <- mean(svm_pred_test == d_y_test)
+
+      # This is an alternative.
+      # svm_conf_matrix <- table(svm_pred_test, d_y_test)
+      # mean_pct[i] <-
+      #   (sum(svm_conf_matrix[1, 1] + svm_conf_matrix[2, 2]) /
+      #      sum(svm_conf_matrix))
+    }
+    mean_pct
+  }
+
+svm_1_linear_pct <-
+  train_test_svm(d_model_no_fctrs, fmla_1, yrs, "linear", 1)
+round(mean(as.numeric(svm_1_linear_pct), na.rm = TRUE), 2)
+round(as.numeric(svm_1_linear_pct), 2)
+```
+
+
+This package has a `tune()` function to perform k-fold cross validation, so
+I don't necessarily need to create a function to do training/testing.
+(The default number of folds is 10.)
+
+
+```{r svm_1_linear_tune}
+set.seed(1)
+range_cost <- 10 ^ seq(-3, 2, 1)
+svm_1_linear_tune <-
+  tune(
+    svm,
+    as.formula(fmla_1),
+    data = d_model_no_fctrs,
+    kernel = "linear",
+    ranges = list(cost = range_cost)
+  )
+summary(svm_1_linear_tune)
+svm_1_linear_best <- svm_1_linear_tune$best.model
+svm_1_linear_best$cost
+```
+
+
+It turns out that the best cost value from the several that I tried out is 1,
+so it looks like using the default cost value in my custom train/test
+function wasn't so bad.
+
+Now, in order to get a better feel for how this model performs on a given
+test set, I'll use the model with the lowest error in cross validation
+to predict the outcomes in 2016. (Recall that I did the same thing with the
+LDA model.)
+
+
+```{r svm_1_linear_eval_2}
+vector_train <- !(d_model_no_fctrs$yr_start %in% 2016)
+d_model_no_fctrs_test <- d_model_no_fctrs[!vector_train,]
+svm_1_linear_pred_test <-
+  predict(svm_1_linear_best, d_model_no_fctrs_test)
+svm_1_linear_conf_matrix <-
+  table(svm_1_linear_pred_test, d_model_no_fctrs_test$result)
+svm_1_linear_conf_matrix
+```
+
+
+Yet another model that isn't all that impressive.
+
+Support Vector Machine (SVM) Attempt # 1, Part II
+
+Now I'll try a radial kernel to see if I get better results.
+I'll skip to using my test/training function.
+
+svm_1_radial_eval
+
+```{r }
+svm_1_radial_pct <-
+  train_test_svm(d_model_no_fctrs, fmla_1, yrs, "radial", 1)
+round(mean(as.numeric(svm_1_radial_pct), na.rm = TRUE), 2)
+round(as.numeric(svm_1_radial_pct), 2)
+```
+
+
+Now, as before, I'll look at the performance on just the 2016 year. First,
+I want to see what the optimal cost value is. (Notably, my test/train
+function actually calculates this value with the given data set.)
+
+
+```{r svm_1_radial_tune}
+set.seed(1)
+svm_1_radial_tune <-
+  tune(
+    svm,
+    as.formula(fmla_1),
+    data = d_model_no_fctrs,
+    kernel = "radial",
+    ranges = list(cost = range_cost)
+  )
+summary(svm_1_radial_tune)
+svm_1_radial_best <- svm_1_radial_tune$best.model
+```
+
+
+
+
+
+```{r svm_1_radial_eval}
+vector_train <- !(d_model_no_fctrs$yr_start %in% 2016)
+d_model_no_fctrs_test <- d_model_no_fctrs[!vector_train,]
+svm_1_radial_pred_test <-
+  predict(svm_1_radial_best, d_model_no_fctrs_test)
+svm_1_radial_conf_matrix <-
+  table(svm_1_radial_pred_test, d_model_no_fctrs_test$result)
+svm_1_radial_conf_matrix
+```
+
+
+
+
+
+```{r svm_1_radial_eval_2}
+set.seed(1)
+range_cost <- 10 ^ seq(-3, 2, 1)
+svm_1_radial_tune <-
+  tune(
+    svm,
+    as.formula(fmla_1),
+    data = d_model_no_fctrs,
+    kernel = "radial",
+    ranges = list(cost = range_cost)
+  )
+summary(svm_1_radial_tune)
+svm_1_radial_best <- svm_1_radial_tune$best.model
+
+vector_train <- !(d_model_no_fctrs$yr_start %in% 2016)
+d_model_no_fctrs_test <- d_model_no_fctrs[!vector_train,]
+svm_1_radial_pred_test <-
+  predict(svm_1_radial_best, d_model_no_fctrs_test)
+svm_1_radial_conf_matrix <-
+  table(svm_1_radial_pred_test, d_model_no_fctrs_test$result)
+svm_1_radial_conf_matrix
+```
+
+
+
+
+
+# Trees Attempt #1
+
+Now, I'll look at trees. Just because I'm curious, I want to see how a tree
+using all of the predictors looks.
+
+
+```{r tree_0_create}
+library(tree)
+tree_0_fit_full <- tree(result ~ ., data = d_model)
+tree_0_fit_full
+summary(tree_0_fit_full)
+```
+
+test_table_output, include = FALSE
+
+```{r }
+# knitr::kable(summary(tree_0_fit_full))
+# print(xtable::xtable(summary(tree_0_fit_full), caption = "xtable"))
+# stargazer::stargazer(summary(tree_0_fit_full))
+# dplyr::glimpse(tree_0_fit_full)
+
+plot(tree_0_fit_full)
+text(tree_0_fit_full, pretty = 0)
+```
+
+
+That's quite a "busy" tree. It's difficult to make much from its output.
+
+Now, I'll look at a tree for the `fmla_1` that I've been using before.
+
+#+ tree_1_create
+
+```{r }
+tree_1_fit_full <- tree(fmla_1, data = d_model)
+tree_1_fit_full
+summary(tree_1_fit_full)
+plot(tree_1_fit_full)
+text(tree_1_fit_full, pretty = 0)
+```
+
+
+Now I'll train/test the tree.
+
+
+```{r tree_0_eval}
+# Not going to use a random sample.
+# set.seed(1)
+# vector_train_tree_1 <- sample(1:nrow(d_model), floor(0.8 * nrow(d_model)))
+vector_train_tree_1  <- !(d_model$yr_start %in% 2016)
+d_model_tree_1_test <- d_model[!vector_train_tree_1,]
+d_y_tree_1_test <- d_model$result[!vector_train_tree_1]
+tree_1_train <- tree(fmla_1, d_model, subset = vector_train_tree_1)
+tree_1_pred_test <- predict(tree_1_train, d_model_tree_1_test, type = "class")
+tree_1_conf_matrix <- table(tree_1_pred_test, d_y_tree_1_test)
+tree_1_conf_matrix
+```
+
+
+
+
+
+```{r rf_bag_1}
+library(randomForest)
+set.seed(1)
+d_model_no_nas <- na.omit(d_model)
+vector_train_no_nas <- !(d_model_no_nas$yr_start %in% 2016)
+
+rf_bag_1_fit_train <- randomForest(as.formula(fmla_1), mtry = 2, data = d_model_no_nas, importance = TRUE)
+rf_bag_1_fit_train
+```
+
+
+# Conclusion
+
+That's all the analysis that I'm going to do on this subject for now.
+Of course, much more data could be incorporated to potentially improve the
+models that I've experimented with here. I think some other useful data
+might be variables indicating the change in team salary from one year to
+another, the change in mean/medain team age, the amount of injury "luck" the
+team had in the previous year, etc. Nevertheless, even with more data and
+better models, I think there is probably a theoretical limit on the accuracy
+of projecting team win totals around 60%. Sports like basketball are just
+too random to be able to predict extremely accurately.
+
+
+
+
