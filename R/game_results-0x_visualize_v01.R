@@ -1,12 +1,14 @@
 
 
 
+
+
 #'
 #'
 #'
 #+ include = FALSE
 rm(list = ls())
-
+setwd("O:/_other/projects/nba/")
 
 #'
 #'
@@ -18,8 +20,8 @@ library("readr")
 library("ggplot2")
 library("lubridate")
 library("tidyr")
+seed <- 42
 theme_set(theme_minimal())
-# theme_set(hrbrthemes::theme_ipsum_rc())
 
 #'
 #'
@@ -76,8 +78,7 @@ results_prepared <- read_csv(filepath_import)
 colnames_base <- c("date", "season", "tm")
 colnames_calc_dates <-
   c("yyyy", "mm", "dd", "wd", "mm_yyyy", "mm_w")
-# Look at a couple of different metrics.
-colnames_viz <- c("g_td", "pd")
+colnames_viz <- c("g_td", "pd_h2a", "ortg_off_1g")
 
 results_calendar_tm <-
   results_prepared %>%
@@ -96,29 +97,27 @@ results_calendar_tm <-
   arrange(season, g_td, tm)
 results_calendar_tm
 
-# Tidy up because I was experimenting with different metrics, not just point differential.
 results_calendar_tm_tidy <-
   results_calendar_tm %>%
   # mutate_if(is.character, funs(as.factor)) %>%
   gather(metric, value, colnames_viz)
 
-season <- 2016
+seasons <- c(2014, 2016)
 wd_labels <- levels(results_calendar_tm$wd)
 wd_labels[2:6] <- ""
-title <- str_c("San Antonio Spurs Point Differential in ", season, " NBA Season")
+wd_labels
 
 results_calendar_tm_tidy %>%
   filter(season %in% seasons) %>%
-  filter(metric == "pd") %>%
+  filter(metric == "pd_h2a") %>%
   ggplot() +
   geom_tile(aes(x = wd, y = mm_w, fill = value), colour = "white") +
   scale_y_reverse() +
   scale_x_discrete(labels = wd_labels) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
-  scale_fill_gradient2(low = "red", mid = "grey", high = "green") +
-  theme(legend.position = "bottom") +
-  labs(x = "", y = "", title = title) +
-  facet_wrap( ~ mm_yyyy, nrow = 2)
+  labs(x = "", y = "") +
+  scale_fill_gradient(low = "cyan", high = "red") +
+  facet_wrap(~ mm_yyyy, nrow = length(seasons))
 
 #'
 #'

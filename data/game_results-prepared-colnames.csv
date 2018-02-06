@@ -6,9 +6,12 @@ base,tm_away
 base,pts_home
 base,pts_away
 base,pd_h2a
+base,prob_h2a
 base,pts_total
 base,tm
 base,tm_opp
+base,prob
+base,prob_opp
 base,pd
 base,pd_opp
 calc,tm_winner

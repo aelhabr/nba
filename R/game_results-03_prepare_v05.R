@@ -1,23 +1,4 @@
-#' ---
-#' title: ""
-#' author: "Tony"
-#' date: "`r format(Sys.time(), '%B %d, %Y')`"
-#' output:
-#'  html_document:
-#'    toc: true
-#'    toc_depth: 3
-#' ---
-#'
-#+ global_options, include = FALSE
-knitr::opts_chunk$set(
-  echo = TRUE,
-  cache = FALSE,
-  fig.show = "hide",
-  fig.align = "center",
-  results = "hide",
-  warning = FALSE,
-  message = FALSE
-)
+
 #'
 #'
 #'
@@ -285,7 +266,7 @@ results_with_dist <-
 #'
 #+ include = FALSE
 if (remove_tempvars == TRUE) {
-  rm(list = c("results_2x"))
+  rm(list = c("results_2X"))
 }
 #'
 #'
@@ -346,11 +327,10 @@ results_cumcalcs_1 <-
     l_td = cumsum(!is.na(w) & w == 0),
     t_td = cumsum(is.na(w)),
     hfa_td = cumsum(hfa),
-    hfa_inv_td = cumsum(hfa == 0),
     pf_td = cummean(pts),
     pa_td = cummean(pts_opp)
   ) %>%
-  select(-pts, -pts_opp) %>%
+  select(-pts,-pts_opp) %>%
   mutate(pd_td = (pf_td - pa_td),
          wp_td = (w_td / g_td))
 
@@ -384,22 +364,12 @@ results_cumcalcs_2 <-
   mutate(no2drestin5 = ifelse(g_td > 1, ifelse(drest_2 < 2, 1, 0), 0)) %>%
   ungroup() %>%
   group_by(season, tm, hfa_td) %>%
-  # mutate(rtrip = row_number(g_td) - 1) %>%
   mutate(rtrip = row_number(g_td) - 1) %>%
-  ungroup() %>% 
-  group_by(season, tm, hfa_inv_td) %>% 
-  # mutate(hstand = row_number(g_td) - 1) %>% 
-  mutate(hstand = row_number(g_td) - 1) %>%
-  ungroup() %>% 
-  # mutate(rtrip_2 = ifelse(hfa == 0, rtrip, rtrip - 1)) %>% 
-  # mutate(hstand_2 = ifelse(hfa == 1, hstand, hstand - 1))
-  mutate(rtrip = ifelse(hfa_td > 0, rtrip, rtrip + 1),
-         hstand = ifelse(hfa_inv_td > 0, hstand, hstand + 1))
+  ungroup()
 
 #'
 #'
 #'
-#+ include = FALSE
 # results_cumcalcs_2 %>%
 #   filter(tm == "SAS") %>%
 #   filter(season == "2016") %>% 
@@ -413,17 +383,9 @@ results_cumcalcs_2 %>%
   select(
     date,
     # season,
-    # tm,
     tm_home,
     tm_away,
-    g_td,
-    # hfa,
-    hfa_td,
-    hfa_inv_td,
-    rtrip,
-    # rtrip_2,
-    hstand,
-    # hstand_2,
+    hfa,
     dist_td,
     g_last7,
     dist_last7,
@@ -431,7 +393,8 @@ results_cumcalcs_2 %>%
     b2b,
     drest_2,
     no2drestin4,
-    no2drestin5
+    no2drestin5,
+    rtrip
   )
 #'
 #'
@@ -475,7 +438,6 @@ colnames_calc_1 <-
     "l_td",
     "t_td",
     "hfa_td",
-    "hfa_inv_td",
     "pf_td",
     "pa_td",
     "pd_td",
@@ -493,8 +455,7 @@ colnames_calc_2 <-
     "b2b",
     "no2drestin4",
     "no2drestin5",
-    "rtrip",
-    "hstand"
+    "rtrip"
   )
 
 colnames_calc <- c(colnames_calc_1, colnames_calc_2)
@@ -771,5 +732,3 @@ if (export == TRUE) {
 #'
 #'
 #'
-
-
