@@ -4,7 +4,8 @@
 
 This project is under active development. It includes scripts for scraping,
 "munging", and analyzing data from
-probasketballreference.com. So far, creating machine learning models
+<https://www.basketball-reference.com>.
+So far, creating machine learning models
 to predict season win totals has been the major focus of the analysis scripts.
 However, plenty of other exploratory kinds of analysis have also been done.
 

@@ -2,7 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+**Thumbs.db
 **.csv
 **.xlsx
 **.rds
 **.RData
+**.rda
