@@ -1,0 +1,36 @@
+city,state,country,lat,lng,pop,id,tm_num,tm,tm_name_full,status,conf_id,conf_name,div_id,div_name
+Atlanta,GA,US,33.749,-84.38798,420003,1,1,ATL,Atlanta Hawks,1,1,East,3,Southeast
+Boston,MA,US,42.35843,-71.05977,617594,2,2,BOS,Boston Celtics,1,1,East,1,Atlantic
+Brooklyn,NY,US,40.6501,-73.94958,2300664,3,3,BRK,Brooklyn Nets,1,1,East,1,Atlantic
+Brooklyn,NY,US,40.6501,-73.94958,2300664,31,3,NJN,New Jersey Nets,0,1,East,1,Atlantic
+Charlotte,NC,US,35.22709,-80.84313,731424,4,4,CHO,Charlotte Hornets,1,1,East,3,Southeast
+Charlotte,NC,US,35.22709,-80.84313,731424,33,4,CHA,Charlotte Bobcats,0,1,East,3,Southeast
+Chicago,IL,US,41.85003,-87.65005,2695598,5,5,CHI,Chicago Bulls,1,1,East,2,Central
+Cleveland,OH,US,41.4995,-81.69541,396815,6,6,CLE,Cleveland Cavaliers,1,1,East,2,Central
+Dallas,TX,US,32.78306,-96.80667,1197816,7,7,DAL,Dallas Mavericks,1,2,West,6,Southwest
+Denver,CO,US,39.73915,-104.9847,600158,8,8,DEN,Denver Nuggets,1,2,West,4,Northwest
+Detroit,MI,US,42.33143,-83.04575,713777,9,9,DET,Detroit Pistons,1,1,East,2,Central
+Oakland,CA,US,37.80437,-122.2708,390724,10,10,GSW,Golden State Warriors,1,2,West,5,Pacific
+Houston,TX,US,29.76328,-95.36327,2099451,11,11,HOU,Houston Rockets,1,2,West,6,Southwest
+Indianapolis,IN,US,39.76838,-86.15804,829718,12,12,IND,Indiana Pacers,1,1,East,2,Central
+Los Angeles,CA,US,34.05223,-118.24368,3792621,13,13,LAC,Los Angeles Clippers,1,2,West,5,Pacific
+Los Angeles,CA,US,34.05223,-118.24368,3792621,14,14,LAL,Los Angeles Lakers,1,2,West,5,Pacific
+Memphis,TN,US,35.14953,-90.04898,646889,15,15,MEM,Memphis Grizzlies,1,2,West,6,Southwest
+Miami,FL,US,25.77427,-80.19366,399457,16,16,MIA,Miami Heat,1,1,East,3,Southeast
+Milwaukee,WI,US,43.0389,-87.90647,594833,17,17,MIL,Milwaukee Bucks,1,1,East,3,Central
+Minneapolis,MN,US,44.97997,-93.26384,382578,18,18,MIN,Minnesota Timberwolves,1,1,East,4,Northwest
+New Orleans,LA,US,29.95465,-90.07507,343829,19,19,NOP,New Orleans Pelicans,1,1,East,6,Southwest
+New Orleans,LA,US,29.95465,-90.07507,343829,32,19,NOH,New Orleans Hornets,0,2,West,6,Southwest
+New York City,NY,US,40.71427,-74.00597,8175133,20,20,NYK,New York Knicks,1,1,East,1,Atlantic
+Oklahoma City,OK,US,35.46756,-97.51643,579999,21,21,OKC,Oklahoma City Thunder,1,1,East,4,Northwest
+Oklahoma City,OK,US,35.46756,-97.51643,579999,35,19,NOK,New Orleans Hornets,0,2,West,6,Southwest
+Orlando,FL,US,28.53834,-81.37924,238300,22,22,ORL,Orlando Magic,1,1,East,3,Southeast
+Philadelphia,PA,US,39.95233,-75.16379,1526006,23,23,PHI,Philadelphia 76ers,1,1,East,1,Atlantic
+Phoenix,AZ,US,33.44838,-112.07404,1445632,24,24,PHO,Phoenix Suns,1,1,East,5,Pacific
+Portland,OR,US,45.52345,-122.67621,583776,25,25,POR,Portland Trail Blazers,1,1,East,4,Northwest
+Sacramento,CA,US,38.58157,-121.4944,466488,26,26,SAC,Sacramento Kings,1,1,East,5,Pacific
+San Antonio,TX,US,29.42412,-98.49363,1327407,27,27,SAS,San Antonio Spurs,1,1,East,6,Southwest
+Toronto,08,CA,43.70011,-79.4163,26e5,28,28,TOR,Toronto Raptors,1,1,East,1,Atlantic
+Salt Lake City,UT,US,40.76078,-111.89105,186440,29,29,UTA,Utah Jazz,1,1,East,4,Northwest
+"Washington, D.C.",DC,US,38.91706,-77.00025,552433,30,30,WAS,Washington Wizards,1,1,East,3,Southeast
+Seattle,WA,US,47.60621,-122.33207,608660,34,21,SEA,Seattle Supersonics,0,2,West,6,Southwest
